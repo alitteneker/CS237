@@ -23,7 +23,13 @@ function prettyPrint(node) {
     if (node instanceof Array) {
       this.visited.push(node);
       var tag = node[0];
-      prettyPrints[tag].apply(this, node.slice(1));
+      if (prettyPrints[tag]) {
+        prettyPrints[tag].apply(this, node.slice(1));
+      } else {
+        this.write("[");
+        this.prettyPrintList(node);
+        this.write("]");
+      }
     } else {
       this.write(node.constructor.name);
       this.write(' { ');
@@ -41,12 +47,6 @@ function prettyPrint(node) {
 }
 
 var prettyPrints = {};
-
-prettyPrints.id = function(name) {
-  this.write('["id", ');
-  this.prettyPrint(name);
-  this.write("]");
-};
 
 prettyPrints.fun = function(argNames, body) {
   this.indentFromHere();
@@ -69,15 +69,6 @@ prettyPrints.closure = function(argNames, body, env) {
   this.prettyPrint(env);
   this.write("]");
   this.dedent();
-};
-
-prettyPrints.call = function(fn /*, arg1, arg2, ... */) {
-  this.write('["call"');
-  for (var idx = 0; idx < arguments.length; idx++) {
-    this.write(", ");
-    this.prettyPrint(arguments[idx]);
-  }
-  this.write("]");
 };
 
 prettyPrints.let = function(x, e1, e2) {
@@ -108,43 +99,6 @@ prettyPrints.if = function(cond, tb, fb) {
   this.dedent();
 };
 
-prettyPrints.delay = function(e) {
-  this.write('["delay", ');
-  this.prettyPrint(e);
-  this.write("]");
-};
-
-prettyPrints.force = function(e) {
-  this.write('["force", ');
-  this.prettyPrint(e);
-  this.write("]");
-};
-
-function prettyPrintBinop(op) {
-  return function(x, y) {
-    this.write("[");
-    this.prettyPrint(op);
-    this.write(", ");
-    this.prettyPrint(x);
-    this.write(", ");
-    this.prettyPrint(y);
-    this.write("]");
-  };
-}
-
-prettyPrints['+'] = prettyPrintBinop('+');
-prettyPrints['-'] = prettyPrintBinop('-');
-prettyPrints['*'] = prettyPrintBinop('*');
-prettyPrints['/'] = prettyPrintBinop('/');
-prettyPrints['%'] = prettyPrintBinop('%');
-prettyPrints['='] = prettyPrintBinop('=');
-prettyPrints['<'] = prettyPrintBinop('<');
-prettyPrints['>'] = prettyPrintBinop('>');
-prettyPrints.and  = prettyPrintBinop('and');
-prettyPrints.or   = prettyPrintBinop('or');
-
-prettyPrints.cons = prettyPrintBinop('cons');
-
 prettyPrints.match = function(e /*, p1, e1, p2, e2, ... */) {
   this.write('["match", ');
   this.prettyPrint(e);
@@ -161,13 +115,6 @@ prettyPrints.match = function(e /*, p1, e1, p2, e2, ... */) {
   this.dedent();
   this.write("]");
 };
-
-prettyPrints._ = function() {
-  this.write('["_"]');
-};
-
-prettyPrints.set = prettyPrintBinop('set');
-prettyPrints.seq = prettyPrintBinop('seq');
 
 prettyPrints.listComp = function(e, x, el, ep) {
   this.write('["listComp",');

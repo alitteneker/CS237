@@ -32,8 +32,8 @@ Environment.prototype.lookup = function(id) {
     return this.getParent().lookup(id);
   throw new Error("Unbound variable " + id);
 };
-Environment.prototype.setVar = function(id, val) {
-  if( this.hasVar(id) )
+Environment.prototype.setVar = function(id, val, local) {
+  if( local || this.hasVar(id) )
     this.vars[id] = val;
   else if( this.parent !== undefined && this.parent.hasVar(id, true) )
     this.parent.setVar(id, val);
@@ -47,7 +47,7 @@ Environment.prototype.getParent = function() {
 
 function ev(ast) {
 
-  if( ast === undefined || typeof ast !== 'object' )
+  if( ast === undefined || ast === null || typeof ast !== 'object' )
     return ast;
   
   else {
@@ -165,7 +165,7 @@ var impls = {
   "let": function(id, val, expr) {
     F.pushStack();
 
-    F.ENV.setVar(id, ev(val));
+    F.ENV.setVar(id, ev(val), true);
     var ret = ev(expr);
 
     F.popStack();
@@ -181,14 +181,56 @@ var impls = {
     if( typeof func !== 'object' )
       throw new Error("Cannot call non-function");
     return func.exec(arglist);
+  },
+
+  // implementations for lists et al
+  "cons": function(a, b) {
+    return ["cons", ev(a), ev(b)];
+  },
+  "match": function(expr) {
+    return doMatch(ev(expr), Array.prototype.slice.call(arguments, 1));
   }
 };
+
+function doMatch(val, args) {
+  var ret = undefined;
+  while( args.length > 0 ) {
+    var pattern = args[0];
+    var expr = args[1];
+    F.pushStack();
+    if( checkMatch(pattern, val) ) {
+      ret = ev(expr);
+      args = [];
+    }
+    else
+      args = args.slice(2);
+    F.popStack();
+  }
+  if( ret === undefined )
+    throw new Error("Match failure");
+  return ret;
+}
+function checkMatch(pattern, val) {
+  if( pattern === null && val === null )
+    return true;
+  if( typeof pattern === 'object' && pattern !== null ) {
+    if( pattern[0] === '_' )
+      return true;
+    if( pattern[0] === 'id' ) {
+      F.ENV.setVar(pattern[1], val);
+      return true;
+    }
+    if( pattern[0] === 'cons' && ( typeof val === 'object' && val[0] === 'cons' ) )
+      return checkMatch(pattern[1], val[1]) && checkMatch(pattern[2], val[2]);
+  }
+  return pattern === val;
+}
 
 function CFunction(varlist, expr, env) {
   this.varlist = varlist;
   this.expr = expr;
   this.ENV = env || F.ENV;
-};
+}
 CFunction.prototype.count_args = function() {
   return this.varlist.length;
 };
@@ -198,10 +240,11 @@ CFunction.prototype.exec = function(arglist) {
 
     var newEnv = new Environment(this.ENV);
     for( var ind = 0; ind < arglist.length; ++ind )
-      newEnv.setVar(this.varlist[ind], ev(arglist[ind]) );
-    if( arglist.length < this.count_args() ) {
+      newEnv.setVar(this.varlist[ind], ev(arglist[ind]), true);
+
+    // currying
+    if( arglist.length < this.count_args() )
       return new CFunction(this.varlist.slice(arglist.length), this.expr, newEnv);
-    }
 
     var oldENV = F.ENV;
     F.ENV = newEnv;
