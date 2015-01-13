@@ -189,8 +189,32 @@ var impls = {
   },
   "match": function(expr) {
     return doMatch(ev(expr), Array.prototype.slice.call(arguments, 1));
+  },
+  "listComp": function(expr, id, list, pred) {
+    return doListComp(expr, id, ev(list), pred);
   }
 };
+
+function doListComp(expr, id, val, pred) {
+  if( typeof val !== 'object' ) {
+    F.pushStack();
+    F.ENV.setVar(id, val);
+    if( pred ) {
+      var predVal = ev(pred);
+      if( predVal === false ) {
+        F.popStack();
+        return val;
+      }
+    }
+    var retVal = ev(expr);
+    F.popStack();
+    return retVal;
+  }
+  if( val !== null && typeof val === 'object' && val[0] == 'cons' ) {
+    return ['cons', doListComp(expr, id, val[1], pred), doListComp(expr, id, val[2], pred) ];
+  }
+  return val;
+}
 
 function doMatch(val, args) {
   var ret = undefined;
