@@ -203,7 +203,7 @@ function doListComp(expr, id, val, pred) {
       var predVal = ev(pred);
       if( predVal === false ) {
         F.popStack();
-        return val;
+        return undefined;
       }
     }
     var retVal = ev(expr);
@@ -211,7 +211,11 @@ function doListComp(expr, id, val, pred) {
     return retVal;
   }
   if( val !== null && typeof val === 'object' && val[0] == 'cons' ) {
-    return ['cons', doListComp(expr, id, val[1], pred), doListComp(expr, id, val[2], pred) ];
+    var left  = doListComp(expr, id, val[1], pred),
+        right = doListComp(expr, id, val[2], pred);
+    if( left === undefined || right === undefined )
+      return left === undefined ? right : left;
+    return ['cons', left, right];
   }
   return val;
 }
