@@ -40,14 +40,27 @@ Environment.prototype.setVar = function(id, val, local) {
   else
     this.vars[id] = val;
 };
+Environment.prototype.setParent = function(newPar) {
+  this.parent = newPar;
+};
 Environment.prototype.getParent = function() {
   return this.parent;
+};
+Environment.prototype.flattenEnv = function() {
+  var env = new Environment();
+  var curr = this;
+  while( this !== undefined ) {
+    for( var key in curr.vars )
+      env.setVar(key, curr.vars[key]);
+    curr = curr.getParent();
+  }
+  return env;
 };
 
 
 function ev(ast) {
 
-  if( ast === undefined || ast === null || typeof ast !== 'object' )
+  if( ast === undefined || ast === null || typeof ast !== 'object' || ast instanceof CFunction )
     return ast;
   
   else {
@@ -141,7 +154,7 @@ var impls = {
   },
 
   "id": function(id) {
-    return F.ENV.lookup(id);
+    return ev(F.ENV.lookup(id));
   },
   "set": function(id, expr) {
     var val = ev(expr);
@@ -188,12 +201,53 @@ var impls = {
     return ["cons", ev(a), ev(b)];
   },
   "match": function(expr) {
-    return doMatch(ev(expr), Array.prototype.slice.call(arguments, 1));
+    var val = ev(expr),
+        args = Array.prototype.slice.call(arguments, 1),
+        ret = undefined;
+    while( args.length > 0 ) {
+      var pattern = args[0];
+      var expr = args[1];
+      F.pushStack();
+      if( checkMatch(pattern, val) ) {
+        ret = ev(expr);
+        args = [];
+      }
+      else
+        args = args.slice(2);
+      F.popStack();
+    }
+    if( ret === undefined )
+      throw new Error("Match failure");
+    return ret;
   },
   "listComp": function(expr, id, list, pred) {
     return doListComp(expr, id, ev(list), pred);
+  },
+
+  // delay and force
+  "delay": function(a, env) {
+    return ['delay', a, env || F.ENV];
+  },
+  "force": function(a) {
+    return doForce(a);
   }
 };
+
+function doForce(expr) {
+  if( expr !== null && typeof expr === 'object' ) {
+    if( expr[0] === 'delay' ) {
+      var oldENV = F.ENV;
+      if( expr.length > 2 )
+        F.ENV = expr[2];
+      var ret = ev(expr[1]);
+      F.ENV = oldENV;
+      return ret;
+    }
+    else if( expr.map !== undefined )
+      return ev( expr.map( function(val) { return typeof val === 'object' ? doForce(val) : val; } ) );
+  }
+  return ev(expr);
+}
 
 function doListComp(expr, id, val, pred) {
   if( typeof val !== 'object' ) {
@@ -220,24 +274,6 @@ function doListComp(expr, id, val, pred) {
   return val;
 }
 
-function doMatch(val, args) {
-  var ret = undefined;
-  while( args.length > 0 ) {
-    var pattern = args[0];
-    var expr = args[1];
-    F.pushStack();
-    if( checkMatch(pattern, val) ) {
-      ret = ev(expr);
-      args = [];
-    }
-    else
-      args = args.slice(2);
-    F.popStack();
-  }
-  if( ret === undefined )
-    throw new Error("Match failure");
-  return ret;
-}
 function checkMatch(pattern, val) {
   if( pattern === null && val === null )
     return true;
