@@ -11,6 +11,11 @@ tests(
     expected: true
   },
   {
+    name: '= operates correctly for truthy values',
+    code: '0 = false',
+    expected: false
+  },
+  {
     name: 'arithmetic and relational operators should require args to be numbers',
     code: '(fun x -> x) + 1',
     shouldThrow: true

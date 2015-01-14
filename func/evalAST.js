@@ -84,6 +84,8 @@ function ev(ast) {
 }
 
 function checkArgs(args, type) {
+  if( type === 'any' )
+    return true;
   if( typeof args != 'object' || !args.hasOwnProperty('length') )
     return typeof args == type;
 
@@ -98,6 +100,7 @@ function checkArgs(args, type) {
 }
 
 // inputs provides some simple typechecking for operators
+// an entry to this structure also forces the args to be evaluated before calling the implementation
 var inputs = {
   "+": "number",
   "-": "number",
@@ -108,8 +111,8 @@ var inputs = {
   "<": "number",
   ">": "number",
 
-  "=": "same",
-  "!=": "same",
+  "=": "any",
+  "!=": "any",
 
   "and": "boolean",
   "or": "boolean",
@@ -234,7 +237,7 @@ var impls = {
 };
 
 function doForce(expr) {
-  if( expr !== null && typeof expr === 'object' ) {
+  if( expr !== null && !( expr instanceof CFunction ) && typeof expr === 'object' ) {
     if( expr[0] === 'delay' ) {
       var oldENV = F.ENV;
       if( expr.length > 2 )
@@ -243,10 +246,12 @@ function doForce(expr) {
       F.ENV = oldENV;
       return ret;
     }
-    else if( expr.map !== undefined )
-      return ev( expr.map( function(val) { return typeof val === 'object' ? doForce(val) : val; } ) );
+    if( expr[0] === 'cons' ) {
+      return ev( [ 'cons', doForce(expr[1]), doForce(expr[2]) ] );
+    }
+    return doForce(ev(expr));
   }
-  return ev(expr);
+  return expr;
 }
 
 function doListComp(expr, id, val, pred) {
@@ -293,7 +298,7 @@ function checkMatch(pattern, val) {
 function CFunction(varlist, expr, env) {
   this.varlist = varlist;
   this.expr = expr;
-  this.ENV = env || F.ENV;
+  this.closure = env || F.ENV;
 }
 CFunction.prototype.count_args = function() {
   return this.varlist.length;
@@ -302,7 +307,7 @@ CFunction.prototype.exec = function(arglist) {
     if( arglist.length > this.count_args() )
       throw new Error("Cannot call function with more arguments than expected");
 
-    var newEnv = new Environment(this.ENV);
+    var newEnv = new Environment(this.closure);
     for( var ind = 0; ind < arglist.length; ++ind )
       newEnv.setVar(this.varlist[ind], ev(arglist[ind]), true);
 
