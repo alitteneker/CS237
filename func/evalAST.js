@@ -46,17 +46,6 @@ Environment.prototype.setParent = function(newPar) {
 Environment.prototype.getParent = function() {
   return this.parent;
 };
-Environment.prototype.flattenEnv = function() {
-  var env = new Environment();
-  var curr = this;
-  while( this !== undefined ) {
-    for( var key in curr.vars )
-      env.setVar(key, curr.vars[key]);
-    curr = curr.getParent();
-  }
-  return env;
-};
-
 
 function ev(ast) {
 
@@ -172,7 +161,10 @@ var impls = {
 
   // things that are not typecast
   "if": function(cond, a, b) {
-    if( ev(cond) )
+    var condVal = ev(cond);
+    if( typeof condVal !== 'boolean' )
+      throw new Error("If condition must evaluate to boolean");
+    if( condVal )
       return ev(a);
     else
       return ev(b);

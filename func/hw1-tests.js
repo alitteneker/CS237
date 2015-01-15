@@ -62,6 +62,171 @@ tests(
           '  let inc = add 1 in\n' +
           '    inc 10',
     expected: 11
+  },
+  
+  // start Runhang's test
+  {
+    name: 'rh-t1',
+    code: 'let f = fun x -> ((x + 2) * x / 1) % 2 in\n' + 
+          '(let x = 5 in let x = 3 in x) * (let x = 3 in f (x + 2))',
+    expected: 3
+  },
+ 
+  {
+    name: 'rh-t2', 
+    code: 'let f = fun x -> let x = 1 in x = 1 in f 2',
+    expected: true
+  },
+ 
+  // start Zhixuan's test
+  {
+    name: 'primValueNumber1',
+    code: '1',
+    expected: 1
+  },
+  {
+    name: 'primValueNumber2',
+    code: '-10',
+    expected: -10
+  },
+  {
+    name: 'primValueNumber3',
+    code: '0',
+    expected: 0
+  },
+  {
+    name: 'primValueBoolean1',
+    code: 'true',
+    expected: true
+  },
+  {
+    name: 'primValueBoolean2',
+    code: 'false',
+    expected: false
+  },
+  {
+    name: 'primValueNull1',
+    code: 'null',
+    expected: null
+  },
+  {
+    name: 'primValueNull2',
+    code: 'undefined',
+    shouldThrow: true
+  },
+  // ops
+  {
+    name: 'arithmetic and relational operators type checking',
+    code: 'true > false',
+    shouldThrow: true
+  },
+  {
+    name: 'arithmetic and relational operators type checking',
+    code: 'true < 3',
+    shouldThrow: true
+  },
+  {
+    name: 'arithmetic and relational operators type checking',
+    code: 'true / 3',
+    shouldThrow: true
+  },
+  {
+    name: 'arithmetic and relational operators type checking',
+    code: '3 - false',
+    shouldThrow: true
+  },
+  {
+    name: 'arithmetic and relational operators type checking',
+    code: 'true % false',
+    shouldThrow: true
+  },
+  // TODO: confirm this
+  {
+    name: 'logical operators type checking',
+    code: '1 || 1',
+    shouldThrow: true
+  },
+  {
+    name: 'logical operators type checking',
+    code: '4 && 1',
+    shouldThrow: true
+  },
+  {
+    name: 'logical operators type checking',
+    code: 'true || 1',
+    shouldThrow: true
+  },
+  {
+    name: 'logical operators type checking',
+    code: 'false && 1',
+    shouldThrow: true
+  },
+  // equality
+  {
+    name: 'equalty',
+    code: '1 = 1',
+    expected: true
+  },
+  {
+    name: 'equalty',
+    code: 'true = 1',
+    expected: false
+  },
+  {
+    name: 'equalty',
+    code: '1 = null',
+    expected: false
+  },
+  {
+    name: 'equalty',
+    code: 'null = null',
+    expected: true
+  },
+  // id
+  {
+    name: 'variable shadowing',
+    code: 'let x = 3 in let x = 4 in x',
+    expected: 4
+  },
+  {
+    name: 'unbound value',
+    code: 'let f = fun x y -> x*y in f y',
+    shouldThrow: true
+  },
+  // if
+  // TODO: confirm this
+  {
+    name: 'if requires e1 to be boolean',
+    code: 'if 4 then 2 else false',
+    shouldThrow: true
+  },
+  {
+    name: 'conditional',
+    code: 'if 2 < 3 then 4321 else 1234',
+    expected: 4321
+  },
+  // call
+  {
+    name: 'call',
+    code: 'let x = fun x -> x in x 1',
+    expected: 1
+  },
+  {
+    name: 'calling with multiple args',
+    code: 'let f = fun x y -> x*y in f 10 3',
+    expected: 30
+  },
+  {
+    name: 'calling with too many args',
+    code: 'let f = fun x y -> x in f 10 3 true',
+    shouldThrow: true
+  },
+  // end
+  {
+    name: 'end of args placeholder',
+    code: 'if 4 then 2 else false',
+    shouldThrow: true
   }
+  /**/
 );
 
