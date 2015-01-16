@@ -3,7 +3,10 @@ F.evalAST = function(ast) {
   
   F.ENV = new Environment();
 
-  return ev(ast);
+  var ret = ev(ast);
+  if( isDelayed(ret) )
+    throw new Error("Cannot evaluate whole expression to delayed value");
+  return ret;
 };
 
 F.pushStack = function() {
@@ -30,7 +33,7 @@ Environment.prototype.lookup = function(id) {
     return this.vars[id];
   if( this.parent !== undefined )
     return this.getParent().lookup(id);
-  throw new Error("Unbound variable " + id);
+  throw new Error("Unbound variable '" + id + "'");
 };
 Environment.prototype.setVar = function(id, val, local) {
   if( local || this.hasVar(id) )
@@ -49,9 +52,9 @@ Environment.prototype.getParent = function() {
 
 function ev(ast) {
 
-  if( ast === undefined || ast === null || typeof ast !== 'object' || ast instanceof CFunction )
+  if( isPrimitive(ast) )
     return ast;
-  
+
   else {
   
     var tag = ast[0];
@@ -62,34 +65,48 @@ function ev(ast) {
         for( var index = 0; index < args.length; ++index )
           args[index] = ev(args[index]);
         if( !checkArgs(args, inputs[tag]) )
-          throw new Error(tag + " does not support the arguments: " + args);
+          throw new Error("'" + tag + "' does not support the arguments: " + astToString(args, true) );
       }
   
       return impls[tag].apply(undefined, args);
     }
     else
-      throw new Error("Unable to find implementation for " + tag);
+      throw new Error("Unable to find implementation for '" + tag + "'");
   }
+}
+
+function isPrimitive(ast) {
+  return ast === undefined || ast === null || typeof ast !== 'object' || ast instanceof CFunction;
+}
+
+function getType(ast) {
+  if( ast === undefined )
+    return 'undefined';
+  if( ast === null )
+    return 'null';
+  if( ast instanceof CFunction )
+    return 'fun';
+  if( typeof ast === 'object' )
+    return ast[0];
+  return typeof ast;
 }
 
 function checkArgs(args, type) {
   if( type === 'any' )
     return true;
-  if( typeof args != 'object' || !args.hasOwnProperty('length') )
-    return typeof args == type;
 
   if( type == 'same' || ( arguments.length == 1 && args.length > 0 ) )
     type = typeof args[0];
 
   for( var ind = 0; ind < args.length; ++ind )
-    if( typeof args[ind] !== type )
+    if( getType(args[ind]) !== type )
       return false;
 
   return true;
 }
 
 // inputs provides some simple typechecking for operators
-// an entry to this structure also forces the args to be evaluated before calling the implementation
+// an entry to this structure also forces all args to be evaluated before calling the implementation
 var inputs = {
   "+": "number",
   "-": "number",
@@ -159,11 +176,11 @@ var impls = {
     return ev(b);
   },
 
-  // things that are not typecast
+  // things that are not auto type checked
   "if": function(cond, a, b) {
     var condVal = ev(cond);
     if( typeof condVal !== 'boolean' )
-      throw new Error("If condition must evaluate to boolean");
+      throw new Error("'if' condition must evaluate to boolean");
     if( condVal )
       return ev(a);
     else
@@ -216,6 +233,9 @@ var impls = {
     return ret;
   },
   "listComp": function(expr, id, list, pred) {
+    var listVal = ev(list);
+    if( getType(listVal) !== 'cons' )
+      throw new Error('"listComp" requires a list');
     return doListComp(expr, id, ev(list), pred);
   },
 
@@ -228,6 +248,7 @@ var impls = {
   }
 };
 
+// this function is recursive to allow for forcing of variables buried in expressions
 function doForce(expr) {
   if( expr !== null && !( expr instanceof CFunction ) && typeof expr === 'object' ) {
     if( expr[0] === 'delay' ) {
@@ -244,6 +265,17 @@ function doForce(expr) {
     return doForce(ev(expr));
   }
   return expr;
+}
+function isDelayed(ast) {
+  if( !isPrimitive(ast) && typeof ast === 'object' && ast.length > 0 ) {
+    if( ast[0] === 'delay' )
+      return true;
+    for( var ind = 0; ind < ast.length; ++ind )
+      if( isDelayed(ast[ind]) )
+        return true;
+    return false;
+  }
+  return false;
 }
 
 function doListComp(expr, id, val, pred) {
@@ -315,4 +347,19 @@ CFunction.prototype.exec = function(arglist) {
     F.ENV = oldENV;
     return ret;
 };
+CFunction.prototype.toString = function() {
+  return "['fun', " + astToString(this.varlist) + ", " +  astToString(this.expr) + "]";
+};
 
+function astToString(ast, shallow) {
+  if( !isPrimitive(ast) && ast.length > 0 ) {
+    if( shallow )
+      return getType(ast);
+
+    var ret = "[";
+    for( var ind = 0; ind < ast.length; ++ind )
+      ret += ( ind > 0 ? ", " : "" ) + astToString(ast[ind]);
+    return ret + ']';
+  }
+  return "" + ast;
+}

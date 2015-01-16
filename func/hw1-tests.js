@@ -226,6 +226,22 @@ tests(
     name: 'end of args placeholder',
     code: 'if 4 then 2 else false',
     shouldThrow: true
+  },
+  
+  {
+    name: 'function shallow equivolence',
+    code: 'let f = fun x -> x + 1 in let f2 = f in f = f2',
+    expected: true
+  },
+  {
+    name: 'function shallow equivolence false',
+    code: 'let f = fun x -> x + 1 in let f2 = fun x -> x * x in f = f2',
+    expected: false
+  },
+  {
+    name: 'function shallow not-equivolence true',
+    code: 'let f = fun x -> x + 1 in let f2 = fun x -> x + 1 in f != f2',
+    expected: true
   }
   /**/
 );
