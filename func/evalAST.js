@@ -76,7 +76,7 @@ function ev(ast) {
 }
 
 function isPrimitive(ast) {
-  return ast === undefined || ast === null || typeof ast !== 'object' || ast instanceof CFunction;
+  return ast === undefined || ast === null || typeof ast !== 'object' || ast[0] === 'closure';
 }
 
 function getType(ast) {
@@ -84,8 +84,6 @@ function getType(ast) {
     return 'undefined';
   if( ast === null )
     return 'null';
-  if( ast instanceof CFunction )
-    return 'fun';
   if( typeof ast === 'object' )
     return ast[0];
   return typeof ast;
@@ -198,14 +196,14 @@ var impls = {
   },
 
   "fun": function(varlist, expr) {
-    return new CFunction(varlist, expr);
+    return ['closure', varlist, expr, F.ENV];
   },
   "call": function(funcexpr) {
     var arglist = Array.prototype.slice.call(arguments,1);
     var func = ev(funcexpr);
-    if( typeof func !== 'object' )
+    if( getType(func) !== 'closure' )
       throw new Error("Cannot call non-function");
-    return func.exec(arglist);
+    return callFunc(func, arglist);
   },
 
   // implementations for lists et al
@@ -250,7 +248,7 @@ var impls = {
 
 // this function is recursive to allow for forcing of variables buried in expressions
 function doForce(expr) {
-  if( expr !== null && !( expr instanceof CFunction ) && typeof expr === 'object' ) {
+  if( expr !== null && typeof expr === 'object' ) {
     if( expr[0] === 'delay' ) {
       var oldENV = F.ENV;
       if( expr.length > 2 )
@@ -319,36 +317,28 @@ function checkMatch(pattern, val) {
   return pattern === val;
 }
 
-function CFunction(varlist, expr, env) {
-  this.varlist = varlist;
-  this.expr = expr;
-  this.closure = env || F.ENV;
-}
-CFunction.prototype.count_args = function() {
-  return this.varlist.length;
-};
-CFunction.prototype.exec = function(arglist) {
-    if( arglist.length > this.count_args() )
-      throw new Error("Cannot call function with more arguments than expected");
+function callFunc(func, arglist) {
+  var varlist = func[1],
+      expr = func[2],
+      closure = func[3];
+  if( arglist.length > varlist.length )
+    throw new Error("Cannot call function with more arguments than expected");
 
-    var newEnv = new Environment(this.closure);
-    for( var ind = 0; ind < arglist.length; ++ind )
-      newEnv.setVar(this.varlist[ind], ev(arglist[ind]), true);
+  var newEnv = new Environment(closure);
+  for( var ind = 0; ind < arglist.length; ++ind )
+    newEnv.setVar(varlist[ind], ev(arglist[ind]), true);
 
-    // currying
-    if( arglist.length < this.count_args() )
-      return new CFunction(this.varlist.slice(arglist.length), this.expr, newEnv);
+  // currying
+  if( arglist.length < varlist.length )
+    return ['closure', varlist.slice(arglist.length), expr, newEnv];
 
-    var oldENV = F.ENV;
-    F.ENV = newEnv;
+  var oldENV = F.ENV;
+  F.ENV = newEnv;
 
-    var ret = ev(this.expr);
+  var ret = ev(expr);
     
-    F.ENV = oldENV;
-    return ret;
-};
-CFunction.prototype.toString = function() {
-  return "['fun', " + astToString(this.varlist) + ", " +  astToString(this.expr) + "]";
+  F.ENV = oldENV;
+  return ret;
 };
 
 function astToString(ast, shallow) {
