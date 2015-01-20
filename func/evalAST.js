@@ -186,9 +186,16 @@ var impls = {
   },
 
   "let": function(id, val, expr) {
+//     Uncomment this line for recursive lets
+//     F.pushStack();
+
+    var variable = ev(val);
+
+//     Comment the next line out for recursive lets
     F.pushStack();
 
-    F.ENV.setVar(id, ev(val), true);
+    F.ENV.setVar(id, variable, true);
+
     var ret = ev(expr);
 
     F.popStack();
