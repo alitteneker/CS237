@@ -9,6 +9,11 @@ tests(
     expected: 120
   },
   {
+    name: 'unbound let handling',
+    code: 'let x = 1 in let x = x + 1 in x + 2',
+    shouldThrow: true
+  },
+  {
     name: 'currying',
     code: 'let add = fun x y -> x + y in\n' +
           '  let inc = add 1 in\n' +
@@ -19,6 +24,11 @@ tests(
     name: 'cons',
     code: '5 + 4::0::6::nil',
     expected: ['cons', 9, ['cons', 0, ['cons', 6, null]]]
+  },
+  {
+    name: 'cons equals',
+    code: 'let x = (1+2)::(2+3) in x = x',
+    expected: true
   },
   {
     name: 'list sugar',

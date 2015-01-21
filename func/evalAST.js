@@ -29,8 +29,11 @@ Environment.prototype.hasVar = function(id, checkParent) {
   return ret;
 };
 Environment.prototype.lookup = function(id) {
-  if( this.hasVar(id) )
+  if( this.hasVar(id) ) {
+    if( this.vars[id] === undefined )
+      throw new Error("Cannot use still unbound variable '"+id+"'");
     return this.vars[id];
+  }
   if( this.parent !== undefined )
     return this.getParent().lookup(id);
   throw new Error("Unbound variable '" + id + "'");
@@ -41,7 +44,7 @@ Environment.prototype.setVar = function(id, val, local) {
   else if( this.parent !== undefined && this.parent.hasVar(id, true) )
     this.parent.setVar(id, val);
   else
-    this.vars[id] = val;
+    throw new Error("Cannot set value of unbound identifier '"+id+"'");
 };
 Environment.prototype.setParent = function(newPar) {
   this.parent = newPar;
@@ -161,7 +164,7 @@ var impls = {
   },
 
   "id": function(id) {
-    return ev(F.ENV.lookup(id));
+    return F.ENV.lookup(id);
   },
   "set": function(id, expr) {
     var val = ev(expr);
@@ -186,14 +189,11 @@ var impls = {
   },
 
   "let": function(id, val, expr) {
-//     Uncomment this line for recursive lets
-//     F.pushStack();
-
-    var variable = ev(val);
-
-//     Comment the next line out for recursive lets
     F.pushStack();
 
+    F.ENV.setVar(id, undefined, true);
+
+    var variable = ev(val);
     F.ENV.setVar(id, variable, true);
 
     var ret = ev(expr);
@@ -206,7 +206,7 @@ var impls = {
     return ['closure', varlist, expr, F.ENV];
   },
   "call": function(funcexpr) {
-    var arglist = Array.prototype.slice.call(arguments,1);
+    var arglist = Array.prototype.slice.call(arguments, 1);
     var func = ev(funcexpr);
     if( getType(func) !== 'closure' )
       throw new Error("Cannot call non-function");
@@ -284,9 +284,9 @@ function isDelayed(ast) {
 }
 
 function doListComp(expr, id, val, pred) {
-  if( typeof val !== 'object' ) {
+  if( isPrimitive(val) ) {
     F.pushStack();
-    F.ENV.setVar(id, val);
+    F.ENV.setVar(id, val, true);
     if( pred ) {
       var predVal = ev(pred);
       if( predVal === false ) {
@@ -300,7 +300,7 @@ function doListComp(expr, id, val, pred) {
   }
   if( val !== null && typeof val === 'object' && val[0] == 'cons' ) {
     var left  = doListComp(expr, id, val[1], pred),
-        right = doListComp(expr, id, val[2], pred);
+        right = val[2] === null ? null : doListComp(expr, id, val[2], pred);
     if( left === undefined || right === undefined )
       return left === undefined ? right : left;
     return ['cons', left, right];
@@ -315,7 +315,7 @@ function checkMatch(pattern, val) {
     if( pattern[0] === '_' )
       return true;
     if( pattern[0] === 'id' ) {
-      F.ENV.setVar(pattern[1], val);
+      F.ENV.setVar(pattern[1], val, true);
       return true;
     }
     if( pattern[0] === 'cons' && ( typeof val === 'object' && val[0] === 'cons' ) )
@@ -328,6 +328,7 @@ function callFunc(func, arglist) {
   var varlist = func[1],
       expr = func[2],
       closure = func[3];
+
   if( arglist.length > varlist.length )
     throw new Error("Cannot call function with more arguments than expected");
 
@@ -335,7 +336,7 @@ function callFunc(func, arglist) {
   for( var ind = 0; ind < arglist.length; ++ind )
     newEnv.setVar(varlist[ind], ev(arglist[ind]), true);
 
-  // currying
+  // this enables currying
   if( arglist.length < varlist.length )
     return ['closure', varlist.slice(arglist.length), expr, newEnv];
 
@@ -349,13 +350,13 @@ function callFunc(func, arglist) {
 };
 
 function astToString(ast, shallow) {
-  if( !isPrimitive(ast) && ast.length > 0 ) {
-    if( shallow )
+  if( typeof ast === 'object' && ast.length > 0 ) {
+    if( shallow && typeof ast[0] === 'string' )
       return getType(ast);
 
     var ret = "[";
     for( var ind = 0; ind < ast.length; ++ind )
-      ret += ( ind > 0 ? ", " : "" ) + astToString(ast[ind]);
+      ret += ( ind > 0 ? ", " : "" ) + astToString(ast[ind], shallow);
     return ret + ']';
   }
   return "" + ast;
