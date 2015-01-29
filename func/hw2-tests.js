@@ -93,6 +93,28 @@ tests(
           'let ones = 1::delay ones in\n' +
           '  take 5 ones',
     expected:  ['cons', 1, ['cons', 1, ['cons', 1, ['cons', 1, ['cons', 1, null]]]]]
+  },
+  {
+    name: 'force error',
+    code: 'let x = 1 in let y = delay (x + 1) in x := 2; force (y+1)',
+    expected: 4
+    //shouldThrow: true
+  },
+  {
+    name: 'prime number test',
+    code: 'let head = fun s -> match s with x::_ -> x in ' +
+          'let tail = fun s -> match s with _::dxs -> force dxs in ' +
+          'let take = fun n s -> match n with 0 -> null | _ -> (head s)::take (n - 1) (tail s) in ' +
+          'let ones = 1::delay ones in ' +
+          'let sum = fun s1 s2 -> (head s1) + (head s2)::delay (sum (tail s1) (tail s2)) in ' +
+          'let fib = 1::delay (1::delay (sum fib (tail fib))) in ' +
+          'let filterMultiples = fun n s -> if head s % n = 0 then filterMultiples n (tail s) else (head s)::delay (filterMultiples n (tail s)) in ' +
+          'let sieve = fun s -> (head s)::delay (sieve (filterMultiples (head s) (tail s))) in ' +
+          'let intsFrom = fun n -> n::delay (intsFrom (n + 1)) in ' +
+          'let primes = sieve (intsFrom 2) in ' +
+          'let first = fun p s -> if p (head s) then head s else first p (tail s) in ' +
+          'first (fun x -> x > 1502) primes',
+    expected: 1511
   }
 );
 

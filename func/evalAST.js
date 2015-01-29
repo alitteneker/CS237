@@ -267,7 +267,7 @@ function doForce(expr) {
     if( expr[0] === 'cons' ) {
       return ev( [ 'cons', doForce(expr[1]), doForce(expr[2]) ] );
     }
-    return doForce(ev(expr));
+    return doForce( ev( expr.map(function(val){ return doForce(val) }) ) );
   }
   return expr;
 }
