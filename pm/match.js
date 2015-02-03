@@ -56,36 +56,6 @@ function checkMatch(value, pattern) {
   return false;
 }
 
-
-// LOGICAL COMBINATIONS (variable arg length, with safe short circuiting)
-function and() {
-  var patterns = Array.prototype.slice.call(arguments, 0);
-  return function(value) {
-    var ret = true, ind = -1, old_bindings = bindings, len = patterns.length;
-    bindings = [];
-    while( ret && ++ind < len )
-      ret = ret && checkMatch(value, patterns[ind]);
-    if( ret )
-      old_bindings = old_bindings.concat(bindings);
-    bindings = old_bindings;
-    return ret;
-  }
-}
-function or() {
-  var patterns = Array.prototype.slice.call(arguments, 0);
-  return function(value) {
-    var ret = false, ind = -1, len = patterns.length, old_bindings;
-    while( !ret && ++ind < len ) {
-      old_bindings = bindings;
-      bindings = [];
-      if( Boolean(ret = checkMatch(value, patterns[ind])) )  // friggin strict checks
-        old_bindings = old_bindings.concat(bindings);
-      bindings = old_bindings;
-    }
-    return ret;
-  }
-}
-
 // WHEN
 function when(pattern) {
   return function(value) {
@@ -127,8 +97,39 @@ function many(pattern) {
   return new cMany(pattern);
 }
 
-// Object Matching
+
+// LOGICAL COMBINATIONS (variable arg length, with safe short circuiting)
+function and() {
+  var patterns = Array.prototype.slice.call(arguments, 0);
+  return function(value) {
+    var ret = true, ind = -1, old_bindings = bindings, len = patterns.length;
+    bindings = [];
+    while( ret && ++ind < len )
+      ret = ret && checkMatch(value, patterns[ind]);
+    if( ret )
+      old_bindings = old_bindings.concat(bindings);
+    bindings = old_bindings;
+    return ret;
+  }
+}
+function or() {
+  var patterns = Array.prototype.slice.call(arguments, 0);
+  return function(value) {
+    var ret = false, ind = -1, len = patterns.length, old_bindings;
+    while( !ret && ++ind < len ) {
+      old_bindings = bindings;
+      bindings = [];
+      if( Boolean(ret = checkMatch(value, patterns[ind])) )  // friggin strict checks
+        old_bindings = old_bindings.concat(bindings);
+      bindings = old_bindings;
+    }
+    return ret;
+  }
+}
 /**
+  // =======================
+  // === OBJECT MATCHING ===
+  // =======================
   // INPUTS:
   
   // no KV definition causes everything to be assumed to be required
@@ -141,7 +142,7 @@ function many(pattern) {
       type: 'allowed* | required | disallowed',
       key_pattern: key_name* | pattern,
       val_pattern: _nc* | pattern,
-      multiple: false* | true,
+      multiple: boolean,
     },
     ...
   ])
@@ -226,8 +227,8 @@ oPattern.prototype.decomposePattern = function(oPat, ePat) {
  * Bit of a tangent here, but it's necessary for the below. There are some things we need to setup.
  * We want to be able to build a resultant binding dictionary that follows the format above the oPattern
  * definition. But there's a problem; we need to be able to create something that is structured as an
- * array or object, while maintaining the ability to differentiate it from the resultant array or object
- * of a nested match. To address this conundrum, we create two 'classes', funtionally identical to
+ * array or object, while maintaining the ability to differentiate it from an array or object resulting
+ * from a nested match. To address this conundrum, we create two 'classes', funtionally identical to
  * arrays/objects, which can be easily differentiated from their more basic siblings with instanceof.
  */
 function cArray() { Array.apply(this, arguments) }
@@ -235,11 +236,10 @@ cArray.prototype = Object.create(Array.prototype);
 cArray.prototype.constructor = cArray;
 cArray.prototype.toJSON = function() {
   var ret = [];
-  for( var ind = 0; ind < this.length; ++ind ) {
+  for( var ind = 0; ind < this.length; ++ind )
     ret.push( JSON.stringify(this[ind]) );
-  }
   return '[' + ret.join(', ') + ']';
-}
+};
 function cObject() {
   this.keys   = new cArray();
   this.values = new cArray();
