@@ -37,8 +37,32 @@ function arrayEquals(xs, ys) {
   }
 }
 
+function objectEquals(x, y) {
+  var x_keys = [], y_keys = [], key, length;
+  for( key in x )
+    x_keys.push(key);
+  for( key in y )
+    y_keys.push(key);
+  if( x_keys.length !== y_keys.length )
+    return false;
+  x_keys.sort();
+  y_keys.sort();
+  length = x_keys.length;
+  for( ind = 0; ind < length; ++ind ) {
+    if( x_keys[ind] !== y_keys[ind] )
+      return false;
+    if( !equals(x[x_keys[ind]], y[y_keys[ind]]) )
+      return false;
+  }
+  return true;
+}
+
 function equals(x, y) {
-  return x instanceof Array ? arrayEquals(x, y) : x === y;
+  return x instanceof Array
+      ? arrayEquals(x, y)
+      : ( typeof x === 'object' && typeof y === 'object' )
+          ? objectEquals(x, y)
+          : x === y;
 }
 
 function toDOM(x) {
