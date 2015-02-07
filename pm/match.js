@@ -28,10 +28,7 @@ function checkMatch(value, pattern) {
     var found = pattern.exec(value.toString());
     if( found !== null ) {
       if( found.length > 1 )
-        for( var ind = 1; ind < found.length; ++ind )
-          bindings.push(found[ind]);
-      else
-        bindings.push(value);
+        bindings.push(found.slice(1));
       return true;
     }
   }
@@ -39,7 +36,7 @@ function checkMatch(value, pattern) {
     return pattern._match(value);
   }
   else if( pattern !== null && value !== null
-      && typeof pattern === 'object' && typeof value === 'object'
+      && pattern instanceof Array && value instanceof Array
       && pattern.length > 0 && value.length > 0 ) {
     if( pattern[0] instanceof cMany ) {
       if( checkMatch(value, pattern[0]) ) {
@@ -52,6 +49,17 @@ function checkMatch(value, pattern) {
     else if( pattern.length == 1 && value.length == 1 )
       return checkMatch(value[0], pattern[0]);
     return checkMatch(value[0], pattern[0]) && checkMatch(value.slice(1), pattern.slice(1));
+  }
+  else if( pattern !== null && !(pattern instanceof Array)
+          && typeof pattern === 'object' && typeof value === 'object') {
+    var ret = false;
+    try {
+      if( checkMatch(value, matchObj(pattern)) )
+        ret = true;
+    } catch(e) {
+      console.log("Warning: error in object match")
+    };
+    return ret;
   }
   return false;
 }
@@ -126,6 +134,12 @@ function or() {
     return ret;
   }
 }
+function not(pattern) {
+  return function(value) {
+    return !checkMatch(value, pattern);
+  }
+}
+
 /**
   // =======================
   // === OBJECT MATCHING ===
@@ -133,7 +147,7 @@ function or() {
   // INPUTS:
   
   // no KV definition causes everything to be assumed to be required
-  oPattern({ key_name: val_pattern, ... })
+  oPattern({ key_name: val_pattern, ... }, boolean)
 
   // specify key_values explicitly
   oPattern([
@@ -148,9 +162,9 @@ function or() {
   ])
 
   // can combine definition styles
-  oPattern({ ... }, {
-    key_values: [ { ... }, ... ],
-    allow_extras: boolean
+  oPattern({ ... },
+    [ { ... }, ... ],
+    boolean
   })
   
   // OUTPUTS:
@@ -162,13 +176,13 @@ function or() {
     key_name: { keys: [ key_bindings_1, ... ], values: [ val_bindings_1, ... ] }
   }
 */
-function matchObj(oPat, ePat) {
-  return new oPattern(oPat, ePat);
+function matchObj(oPat, ePat, extras) {
+  return new oPattern(oPat, ePat, extras);
 }
-function oPattern(oPat, ePat) {
+function oPattern(oPat, ePat, extras) {
   this.required = [];
   this.key_values = [];
-  this.allow_extras = ( ePat && ePat.allow_extras !== undefined ) ? ePat.allow_extras : true;
+  this.allow_extras = typeof ePat === 'boolean' ? ePat : typeof extras === 'boolean' ? extras : true;
 
   if( oPat instanceof Array ) {
     ePat = oPat;
@@ -194,11 +208,11 @@ oPattern.prototype.decomposePattern = function(oPat, ePat) {
       this.key_values.push(consider);
     }
   }
-  if( ePat && ( key_values = ePat.key_values ) || ( ePat instanceof Array && ( key_values = ePat ) ) ) {
+  if( ePat && ePat instanceof Array && ( key_values = ePat ) ) {
     for( ind = 0; ind < key_values.length; ++ind ) {
       consider = jQuery.extend(
         {
-          type: name_types[key_values[ind].name] || 'allowed',
+          type: 'required',
           key_pattern: key_values[ind].name,
           val_pattern: _nc,
           multiple: true
@@ -211,14 +225,13 @@ oPattern.prototype.decomposePattern = function(oPat, ePat) {
   }
 
   for( ind = 0; ind < this.key_values.length; ++ind ) {
+    this.key_values[ind].index = ind;
     if( this.key_values[ind].name === undefined )
       throw new Error("Cannot define key without name property");
     if( !/^(?:required|allowed|disallowed)$/.test(this.key_values[ind].type) )
       throw new Error("Illegal type " + this.key_values[ind].type);
-    if( name_types[this.key_values[ind].name] !== this.key_values[ind].type )
-      throw new Error("Two key definitions sharing the same name cannot have different types");
     if( this.key_values[ind].type === 'required' )
-      this.required.push(this.key_values[ind].name);
+      this.required.push(this.key_values[ind].index);
   }
   this.required.dedup();
 }
@@ -263,7 +276,7 @@ oPattern.prototype._checkKVMatch = function(key, value, bind, definition) {
   // if we've found a match, and some results were bound, bind the results in the bind object
   if( ret && ( val_bindings.length || key_bindings.length ) ) {
     existing = bind[definition.name];
-    key_bindings = key_bindings.length > 0 ? ( key_bindings.length == 1 ? key_bindings[0] : key_bindings ) : key;
+    key_bindings = key_bindings.length > 0 ? ( key_bindings.length == 1 ? key_bindings[0] : key_bindings ) : definition.name;
     val_bindings = val_bindings.length > 0 ? ( val_bindings.length == 1 ? val_bindings[0] : val_bindings ) : value;
     if( key_bindings instanceof Array || key_bindings !== definition.name ) {
       if( !(existing instanceof cObject) ) {
@@ -283,8 +296,10 @@ oPattern.prototype._checkKVMatch = function(key, value, bind, definition) {
         existing.keys.push(key_bindings);
         existing.values.push(val_bindings);
       }
-      else
-        bind[definition.name] = new cArray(existing, val_bindings);
+      else {
+        bind[definition.name] = new cArray();
+        bind[definition.name].push(existing, val_bindings);
+      }
     }
     else
       bind[definition.name] = val_bindings;
@@ -349,6 +364,8 @@ oPattern.prototype._match = function(value) {
   if( this.required.length !== found_required.length )
     return false;
 
+  if( Object.keys(bind).length === 0 )
+    bind = value;
   bindings.push(bind);
   return true;
 }

@@ -54,7 +54,7 @@ tests(
   {
     name: 'regex pattern',
     code: 'match("hello bob",\n'+
-          '  /hello\\s+(\\w+)/, function(name) { return "My name is "+name; }\n' +
+          '  /hello\\s+(\\w+)/, function(name_arr) { return "My name is "+name_arr[0]; }\n' +
           ')',
     expected: 'My name is bob'
   },
@@ -137,20 +137,36 @@ tests(
   {
     name: 'basic object',
     code: 'match({ a: 1, hello: "world", b: 2, hola: "mundo", c: 3 },\n'+
-          '  matchObj({ hello: _, hola: /\\w{5}/ }), function(result) { return result }' +
+          '  { hello: _, hola: when(/\\w{5}/) }, function(result) { return result }\n' +
           ')',
     expected: { hello: 'world', hola: 'mundo' }
   },
   {
+    name: 'object extras',
+    code: 'match({ name: "John Smith", email: "john@smithy.net" },\n' +
+          '   matchObj({ name: _ }, false), function(x) { return x },\n' +
+          '   matchObj({ name: "John Smith", email: _ }, false), function(x) { return x }\n' +
+          ');',
+    expected: { email: 'john@smithy.net' }
+  },
+  {
     name: 'multiple basic object patterns',
     code: 'match({ hello: 1, world: 2, foo: "bar" },\n'+
-          '  matchObj({ hello: /^\\D$/ }), function(x) { return x.hello },\n' +
-          '  matchObj({ foo: /^\\w{3}$/ }), function(x) { return x.foo }\n' +
+          '  matchObj({ hello: when(/^\\D$/) }), function(x) { return x.hello },\n' +
+          '  matchObj({ foo: when(/^\\w{3}$/) }), function(x) { return x.foo }\n' +
           ')',
     expected: 'bar'
   },
   {
     name: 'object pattern by simple value',
+    code: 'match({ hello1: 1, hello2: 2, foo: 3, hello3: "3", bar: "433" },\n' +
+          '  matchObj([{ name: "hellos", key_pattern: /hello\\d/, val_pattern: _ }]),\n' +
+          '  function(x) { return x; }\n' +
+          ')',
+    expected: { hellos: [ 1, 2, '3' ] }
+  },
+  {
+    name: 'object pattern by simple value with key bindings',
     code: 'match({ hello: 3, foo: 4, world: 3, bar: "123" },\n' +
           '  matchObj([{ name: "threes", key_pattern: _, val_pattern: 3 }]),\n' +
           '  function(x) { return x.threes.keys; }\n'+
