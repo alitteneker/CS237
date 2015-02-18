@@ -125,8 +125,7 @@ OO.initializeCT = function() {
 	OO.declareMethod("Object", "===",        function(_this, other) { return _this === other; });
 	OO.declareMethod("Object", "!==",        function(_this, other) { return _this !== other; });
 
-	OO.declareClass( "Number", "Object", ['value']);
-	OO.declareMethod("Number", "initialize", function(_this, value) { OO.setInstVar(_this, 'value', value); });
+	OO.declareClass( "Number", "Object", []);
 	OO.declareMethod("Number", "isNumber",   function(_this)        { return true; });
 	OO.declareMethod("Number", "+",          function(_this, other) { return _this + other; });
 	OO.declareMethod("Number", "-",          function(_this, other) { return _this - other; });
