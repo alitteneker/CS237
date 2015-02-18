@@ -5,14 +5,12 @@ function cClass(name, superClass, instVars) {
 	this.methods = {};
 }
 cClass.prototype.getSuperClass = function(name, consider) {
-	if( consider && this.cname === name )
+	if( consider && ( name === this.cname || name === undefined ) )
 	  return this;
-	if( name === undefined )
-		return this.superClass;
 	if( this.hasSuperClass() )
 	  return this.superClass.getSuperClass(name, true);
 	throw new Error("Unable to find super class with name '" + name + "'");
-}
+};
 cClass.prototype.hasSuperClass = function() {
 	return this.superClass !== null;
 };
@@ -33,6 +31,11 @@ cClass.prototype.hasMethod = function(name, local) {
 	  return this.superClass.hasMethod(name);
 	return false;
 };
+cClass.prototype.addMethod = function(name, fn) {
+	if( this.hasMethod(name, true) )
+		throw new Error("Class " + this.cname + " already has method '" + name + "'");
+	this.methods[name] = fn;
+};
 cClass.prototype.getMethod = function(name) {
 	if( this.hasMethod(name, true) )
 	  return this.methods[name];
@@ -40,18 +43,41 @@ cClass.prototype.getMethod = function(name) {
 	  return this.superClass.getMethod(name);
 	throw new Error("Unable to find method '" + name + "'");
 };
+cClass.prototype.instantiate = function(args) {
+	return new cInstance(this, args);
+}
 
-function cInstance(classType) {
+function cInstance(classType, args) {
 	this.classType = classType;
 	this.vars = {};
+	this.callMethod('initialize', args);
 }
+cInstance.prototype.checkVarAllowed = function(name) {
+	if( !this.classType.hasVar(name) )
+		throw new Error("Class " + this.classType.cname + " does not have variable with name '" + name + "'");
+}
+cInstance.prototype.getVar = function(name) {
+	this.checkVarAllowed(name);
+	return this.vars[name];
+};
+cInstance.prototype.setVar = function(name, value) {
+	this.checkVarAllowed(name);
+	return (this.vars[name] = value);
+};
+cInstance.prototype.callMethod = function(fn, args) {
+	if( !(typeof fn === 'function' ) )
+	  fn = this.classType.getMethod(fn);
+	return fn.apply(this, [this].concat(args));
+};
 
 var OO = {
 	classTable: {},
 	hasClass: function(name) {
-		return this.classTable[name] !== undefined;
+		return this.classTable.hasOwnProperty(name);
 	},
 	getClass: function(name) {
+		if( name === null )
+		  return null;
 		if( this.hasClass(name) )
 		  return this.classTable[name];
 		throw new Error("Class '" + name + "' is not defined");
@@ -59,50 +85,36 @@ var OO = {
 	declareClass: function(name, superClassName, instVarNames) {
 		if( this.hasClass(name) )
 		  throw new Error("Class with name '" + name + "' is already defined");
-		var superClass = ( superClassName === null ) ? null : this.getClass(superClassName);
-		this.classTable[name] = new cClass(name, superClass, instVarNames);
+		this.classTable[name] = new cClass(name, this.getClass(superClassName), instVarNames);
 	},
 	declareMethod: function(className, selector, implFn) {
-		var classDef = this.getClass(className);
-		if( classDef.hasMethod(selector, true) )
-		  throw new Error("Class " + className + " already has method '" + selector + "'");
-		classDef.methods[selector] = implFn;
+		this.getClass(className).addMethod(selector, implFn);
 	},
 	instantiate: function(className) {
 		var classDef = this.getClass(className);
-		var args = Array.prototype.slice.call(arguments, 1);
-
-		var ret = new cInstance(classDef);
-		this.send.apply( this, [ret, 'initialize'].concat(args) );
-		return ret;
+		return classDef.instantiate(Array.prototype.slice.call(arguments, 1));
 	},
 	send: function(recv, selector) {
-		if( typeof recv === 'number' )
-			recv = this.instantiate('Number', recv);
-		var meth = recv.classType.getMethod(selector);
 		var args = Array.prototype.slice.call(arguments, 2);
-		return meth.apply(recv, [recv].concat(args));
+		if( typeof recv === 'number' )
+			return this.getClass('Number').getMethod(selector).apply(recv, [recv].concat(args));
+		return recv.callMethod(selector, args);
 	},
 	superSend: function(superClassName, recv, selector) {
 		var meth = recv.classType.getSuperClass(superClassName).getMethod(selector);
-		var args = Array.prototype.slice.call(arguments, 3);
-		return meth.apply(recv, [recv].concat(args))
+		return recv.callMethod( meth, Array.prototype.slice.call(arguments, 3) );
 	},
 	getInstVar: function(recv, instVarName) {
-		if( !recv.classType.hasVar(instVarName) )
-			throw new Error("Class " + recv.classType.cname + " does not have variable with name '" + instVarName + "'");
-		return recv.vars[instVarName];
+		return recv.getVar(instVarName);
 	},
 	setInstVar: function(recv, instVarName, value) {
-		if( !recv.classType.hasVar(instVarName) )
-			throw new Error("Class " + recv.classType.cname + " does not have variable with name '" + instVarName + "'");
-		recv.vars[instVarName] = value;
-		return value;
+		return recv.setVar(instVarName, value);
 	}
 };
 
 OO.initializeCT = function() {
 	this.classTable = {};
+
 	OO.declareClass( "Object", null, []);
 	OO.declareMethod("Object", "initialize", function(_this)        {  });
 	OO.declareMethod("Object", "isNumber",   function(_this)        { return false; });
@@ -112,11 +124,9 @@ OO.initializeCT = function() {
 	OO.declareClass( "Number", "Object", ['value']);
 	OO.declareMethod("Number", "initialize", function(_this, value) { OO.setInstVar(_this, 'value', value); });
 	OO.declareMethod("Number", "isNumber",   function(_this)        { return true; });
-	OO.declareMethod("Number", "===",        function(_this, other) { return OO.getInstVar(_this, 'value') === other; });
-	OO.declareMethod("Number", "!==",        function(_this, other) { return OO.getInstVar(_this, 'value') !== other; });
-	OO.declareMethod("Number", "+",          function(_this, other) { return OO.getInstVar(_this, 'value') + other; });
-	OO.declareMethod("Number", "-",          function(_this, other) { return OO.getInstVar(_this, 'value') - other; });
-	OO.declareMethod("Number", "*",          function(_this, other) { return OO.getInstVar(_this, 'value') * other; });
-	OO.declareMethod("Number", "/",          function(_this, other) { return OO.getInstVar(_this, 'value') / other; });
-	OO.declareMethod("Number", "%",          function(_this, other) { return OO.getInstVar(_this, 'value') % other; });
+	OO.declareMethod("Number", "+",          function(_this, other) { return _this + other; });
+	OO.declareMethod("Number", "-",          function(_this, other) { return _this - other; });
+	OO.declareMethod("Number", "*",          function(_this, other) { return _this * other; });
+	OO.declareMethod("Number", "/",          function(_this, other) { return _this / other; });
+	OO.declareMethod("Number", "%",          function(_this, other) { return _this % other; });
 };
