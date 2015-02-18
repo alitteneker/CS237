@@ -4,31 +4,33 @@ function cClass(name, superClass, instVars) {
 	this.varNames = instVars;
 	this.methods = {};
 }
-cClass.prototype.getSuperClass = function(name, consider) {
-	if( consider && ( name === this.cname || name === undefined ) )
-	  return this;
-	if( this.hasSuperClass() )
-	  return this.superClass.getSuperClass(name, true);
-	throw new Error("Unable to find super class with name '" + name + "'");
+cClass.prototype.getSuperClass = function(name) {
+	var def = this.superClass;
+	while( def !== null ) {
+		if( def.cname === name )
+			return def;
+	}
+	throw new Error("Unable to find super class of " + this.cname + " with name '" + name + "'");
 };
 cClass.prototype.hasSuperClass = function() {
 	return this.superClass !== null;
 };
 cClass.prototype.hasVar = function(name, local) {
-	var index = this.varNames.length;
-	while( index-- ) {
-		if( this.varNames[index] === name )
-		  return true;
+	var def = this, index;
+	while( def !== null ) {
+		if( def.varNames.indexOf(name) >= 0 )
+	  	return true;
+	  def = local ? null : def.superClass;
 	}
-	if( !local && this.hasSuperClass() )
-	  return this.superClass.hasVar(name);
-	throw new Error("Unable to identify variable '" + name + "'");
+	return false;
 };
 cClass.prototype.hasMethod = function(name, local) {
-	if( this.methods.hasOwnProperty(name) )
-	  return true;
-	if( !local && this.hasSuperClass() )
-	  return this.superClass.hasMethod(name);
+	var def = this;
+	while( def !== null ) {
+		if( def.methods.hasOwnProperty(name) )
+	  	return true;
+		def = local ? null : def.superClass;
+	}
 	return false;
 };
 cClass.prototype.addMethod = function(name, fn) {
@@ -36,11 +38,13 @@ cClass.prototype.addMethod = function(name, fn) {
 		throw new Error("Class " + this.cname + " already has method '" + name + "'");
 	this.methods[name] = fn;
 };
-cClass.prototype.getMethod = function(name) {
-	if( this.hasMethod(name, true) )
-	  return this.methods[name];
-	if( this.hasSuperClass() )
-	  return this.superClass.getMethod(name);
+cClass.prototype.getMethod = function(name, cname) {
+	var def = this;
+	while( def !== null ) {
+		if( def.methods.hasOwnProperty(name) && ( cname === undefined || def.cname === cname ) )
+		  return def.methods[name];
+		def = def.superClass;
+	}
 	throw new Error("Unable to find method '" + name + "'");
 };
 cClass.prototype.instantiate = function(args) {
@@ -65,7 +69,7 @@ cInstance.prototype.setVar = function(name, value) {
 	return (this.vars[name] = value);
 };
 cInstance.prototype.callMethod = function(fn, args) {
-	if( !(typeof fn === 'function' ) )
+	if( !(typeof fn === 'function') )
 	  fn = this.classType.getMethod(fn);
 	return fn.apply(this, [this].concat(args));
 };
@@ -101,7 +105,7 @@ var OO = {
 		return recv.callMethod(selector, args);
 	},
 	superSend: function(superClassName, recv, selector) {
-		var meth = recv.classType.getSuperClass(superClassName).getMethod(selector);
+		var meth = recv.classType.getMethod(selector, superClassName);
 		return recv.callMethod( meth, Array.prototype.slice.call(arguments, 3) );
 	},
 	getInstVar: function(recv, instVarName) {
