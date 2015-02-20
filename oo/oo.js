@@ -1,8 +1,14 @@
 function cClass(name, superClass, instVars) {
 	this.cname = name;
 	this.superClass = superClass;
-	this.varNames = instVars;
+	this.varNames = [];
 	this.methods = {};
+
+	for( var ind = 0; ind < instVars.length; ++ind ) {
+		if( this.hasVar(instVars[ind]) )
+		  throw new Error("Duplicate variable definition for " + name + ": '" + instVars[ind] + "'");
+		this.varNames.push(instVars[ind]);
+	}
 }
 cClass.prototype.getSuperClass = function(name) {
 	var def = this.superClass;
