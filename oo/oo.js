@@ -104,25 +104,40 @@ var OO = {
 		var classDef = this.getClass(className);
 		return classDef.instantiate(Array.prototype.slice.call(arguments, 1));
 	},
-	send: function(recv, selector) {
-		var args = Array.prototype.slice.call(arguments, 2);
-		if( typeof recv === 'number' )
-			return this.getClass('Number').getMethod(selector).apply(recv, [recv].concat(args));
-		if( typeof recv === 'boolean' )
-			return this.getClass( recv ? 'True' : 'False' ).getMethod(selector).apply(recv, [recv].concat(args));
-		if( recv === null )
-			return this.getClass('Null').getMethod(selector).apply(recv, [recv].concat(args));
-		return recv.callMethod(selector, args);
-	},
-	superSend: function(superClassName, recv, selector) {
-		var meth = recv.classType.getMethod(selector, superClassName);
-		return recv.callMethod( meth, Array.prototype.slice.call(arguments, 3) );
-	},
 	getInstVar: function(recv, instVarName) {
 		return recv.getVar(instVarName);
 	},
 	setInstVar: function(recv, instVarName, value) {
 		return recv.setVar(instVarName, value);
+	},
+	send: function(recv, selector) {
+		var args = Array.prototype.slice.call(arguments, 2);
+		if( this._isPrimitive(recv) )
+			return this._sendPrimitive(recv, selector, args);
+		return recv.callMethod(selector, args);
+	},
+	superSend: function(superClassName, recv, selector) {
+		var args = Array.prototype.slice.call(arguments, 3);
+		if( this._isPrimitive(recv) )
+			return this._sendPrimitive(recv, selector, args, superClassName);
+		return recv.callMethod( recv.classType.getMethod(selector, superClassName), args );
+	},
+	_isPrimitive: function(recv) {
+		return ( typeof recv === 'number' ) || ( typeof recv === 'boolean' ) || ( recv ===  null );
+	},
+	_sendPrimitive: function(recv, selector, args, superName) {
+		var className = "";
+
+		if( typeof recv === 'number'  ) className = "Number";
+		if( typeof recv === 'boolean' ) className = recv ? "True" : "False";
+		if( recv === null )             className = "Null";
+
+		var classType = this.getClass(className);
+		if( superName !== undefined ) {
+			while( classType.cname !== superName )
+				classType = classType.superClass;
+		}
+		return classType.getMethod(selector).apply(recv, [recv].concat(args));
 	}
 };
 
@@ -153,6 +168,7 @@ OO.initializeCT = function() {
 	OO.declareClass( "False",   "Boolean", []);
 };
 
+/** Translation stuff */
 function checkString(val) {
 	if( typeof val === 'string' )
 		return "'"+val+"'";
@@ -160,7 +176,11 @@ function checkString(val) {
 		return val.map( function(curr) { return checkString(curr); } );
 	return val.toString();
 }
+function transList(args) {
+	return args.map(function(val) { return O.transAST(val); } );
+}
 
+var currClasses, currClass;
 var _transOps = {
 	'null': function() { return 'null'; },
 	'true': function() { return 'true'; },
@@ -168,31 +188,40 @@ var _transOps = {
 	'number': function(val) { return val; },
 	'exprStmt': function(exp) { return O.transAST(exp) },
 	'program': function() {
+		currClasses = { "Object": "", "Null": "Object", "Number": "Object", "Boolean": "Object", "True": "Boolean", "False": "Boolean" };
+		currClass = "";
 		var asts = Array.prototype.slice.call(arguments, 0);
-		return "OO.initializeCT();" + asts.map(function(val){ return O.transAST(val); }).join(';');
+		return "OO.initializeCT();" + transList(asts).join(';');
 	},
 	'classDecl': function(name, superName) {
+		currClasses[name] = superName;
 		var vals = Array.prototype.slice.call(arguments, 2);
 		return 'OO.declareClass("' + name + '", "' + superName
 				+ '", [' + checkString(vals).join(',') + '])';
 	},
 	'methodDecl': function(className, selector, args, bodyASTs) {
+		currClass = className;
 		return 'OO.declareMethod(' + checkString(className) + ', ' + checkString(selector) + ', '
 				+ 'function(' + ['_this'].concat(args).join(',') + ') {'
-				+ bodyASTs.map( function(ast) { return O.transAST(ast); } ) + '} )'
+					+ transList(bodyASTs).join(';') + ';'
+				+ '} )'
 	},
 	'return': function(exp) {
 		return 'return ' + O.transAST(exp);
 	},
 	'new': function(name) {
 		var args = Array.prototype.slice.call(arguments, 1);
-		return "OO.instantiate("
-				+ [checkString(name)].concat(args.map(function(val) { return O.transAST(val); } )).join(',') + ")";
+		return "OO.instantiate(" + [checkString(name)].concat(transList(args)).join(',') + ")";
 	},
 	'send': function(erecv, m) {
 		var args = Array.prototype.slice.call(arguments, 2);
-		return 'OO.send('+[O.transAST(erecv), checkString(m)].concat(
-				args.map(function(val){ return O.transAST(val); })).join(',')+')';
+		return 'OO.send('+[O.transAST(erecv), checkString(m)].concat(transList(args)).join(',')+')';
+	},
+	'super': function(method) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		var super_name = currClasses[currClass];
+		return 'OO.superSend(' + checkString(super_name) + ', _this, '
+				+ [ checkString(method) ].concat( transList(args) ).join(',') + ')';
 	},
 	'varDecls': function() {
 		var rets = [];
