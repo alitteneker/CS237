@@ -108,6 +108,10 @@ var OO = {
 		var args = Array.prototype.slice.call(arguments, 2);
 		if( typeof recv === 'number' )
 			return this.getClass('Number').getMethod(selector).apply(recv, [recv].concat(args));
+		if( typeof recv === 'boolean' )
+			return this.getClass( recv ? 'True' : 'False' ).getMethod(selector).apply(recv, [recv].concat(args));
+		if( recv === null )
+			return this.getClass('Null').getMethod(selector).apply(recv, [recv].concat(args));
 		return recv.callMethod(selector, args);
 	},
 	superSend: function(superClassName, recv, selector) {
@@ -133,9 +137,84 @@ OO.initializeCT = function() {
 
 	OO.declareClass( "Number", "Object", []);
 	OO.declareMethod("Number", "isNumber",   function(_this)        { return true; });
-	OO.declareMethod("Number", "+",          function(_this, other) { return _this + other; });
-	OO.declareMethod("Number", "-",          function(_this, other) { return _this - other; });
-	OO.declareMethod("Number", "*",          function(_this, other) { return _this * other; });
-	OO.declareMethod("Number", "/",          function(_this, other) { return _this / other; });
-	OO.declareMethod("Number", "%",          function(_this, other) { return _this % other; });
+	OO.declareMethod("Number", "+",          function(_this, other) { return _this +  other; });
+	OO.declareMethod("Number", "-",          function(_this, other) { return _this -  other; });
+	OO.declareMethod("Number", "*",          function(_this, other) { return _this *  other; });
+	OO.declareMethod("Number", "/",          function(_this, other) { return _this /  other; });
+	OO.declareMethod("Number", "%",          function(_this, other) { return _this %  other; });
+	OO.declareMethod("Number", "<",          function(_this, other) { return _this <  other; });
+	OO.declareMethod("Number", "<=",         function(_this, other) { return _this <= other; });
+	OO.declareMethod("Number", ">",          function(_this, other) { return _this >  other; });
+	OO.declareMethod("Number", ">=",         function(_this, other) { return _this >= other; });
+
+	OO.declareClass( "Null",    "Object", []);
+	OO.declareClass( "Boolean", "Object", []);
+	OO.declareClass( "True",    "Boolean", []);
+	OO.declareClass( "False",   "Boolean", []);
+};
+
+function checkString(val) {
+	if( typeof val === 'string' )
+		return "'"+val+"'";
+	if( val instanceof Array )
+		return val.map( function(curr) { return checkString(curr); } );
+	return val.toString();
+}
+
+var _transOps = {
+	'null': function() { return 'null'; },
+	'true': function() { return 'true'; },
+	'false': function() { return 'false'; },
+	'number': function(val) { return val; },
+	'exprStmt': function(exp) { return O.transAST(exp) },
+	'program': function() {
+		var asts = Array.prototype.slice.call(arguments, 0);
+		return "OO.initializeCT();" + asts.map(function(val){ return O.transAST(val); }).join(';');
+	},
+	'classDecl': function(name, superName) {
+		var vals = Array.prototype.slice.call(arguments, 2);
+		return 'OO.declareClass("' + name + '", "' + superName
+				+ '", [' + checkString(vals).join(',') + '])';
+	},
+	'methodDecl': function(className, selector, args, bodyASTs) {
+		return 'OO.declareMethod(' + checkString(className) + ', ' + checkString(selector) + ', '
+				+ 'function(' + ['_this'].concat(args).join(',') + ') {'
+				+ bodyASTs.map( function(ast) { return O.transAST(ast); } ) + '} )'
+	},
+	'return': function(exp) {
+		return 'return ' + O.transAST(exp);
+	},
+	'new': function(name) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		return "OO.instantiate("
+				+ [checkString(name)].concat(args.map(function(val) { return O.transAST(val); } )).join(',') + ")";
+	},
+	'send': function(erecv, m) {
+		var args = Array.prototype.slice.call(arguments, 2);
+		return 'OO.send('+[O.transAST(erecv), checkString(m)].concat(
+				args.map(function(val){ return O.transAST(val); })).join(',')+')';
+	},
+	'varDecls': function() {
+		var rets = [];
+		var args = Array.prototype.slice.call(arguments, 0);
+		while( args.length > 0 ) {
+			var set = args.shift();
+			rets.push( set[0] + "=" + O.transAST(set[1]) );
+		}
+		return "var " + rets.join(',');
+	},
+	'getVar': function(id) { return id; },
+	'setVar': function(id, exp) { return id + "=" + O.transAST(exp); },
+	'getInstVar': function(id) { return '_this.' + id; },
+	'setInstVar': function(id, exp) { return '_this.' + id + '=' + O.transAST(exp); }
+};
+
+O.transAST = function(ast) {
+  if( !(ast instanceof Array) )
+		return ast.toString();
+	var tag = ast[0];
+	var args = ast.slice(1);
+	if( !_transOps[tag] )
+		throw new Error("AST tag '"+tag+"' not currently supported");
+	return _transOps[tag].apply(undefined, args);
 };
