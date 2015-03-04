@@ -187,16 +187,27 @@ function checkString(val) {
 	return val.toString();
 }
 function transList(args) {
-	return args.map(function(val) { return O.transAST(val); } );
+	var newArgs = [];
+	for( var i = 0; i < args.length; ++i )
+		newArgs.push(O.transAST(args[i]));
+	return newArgs;
 }
 
 function Return(_id) {
     this.name = "Return";
-    this.message = "Contains a value to be returned from a function.";
+    this.message = "Floating return.";
 		this._id = _id;
 }
 
-var currClasses, currClass;
+function cClasses() {
+	this["Object"]  = "";
+	this["Null"]    = "Object";
+	this["Number"]  = "Object";
+	this["Boolean"] = "Object";
+	this["True"]    = "Boolean";
+	this["False"]   = "Boolean";
+}
+var currClasses = new cClasses, currClass;
 var _transOps = {
 	'null': function() { return 'null'; },
 	'true': function() { return 'true'; },
@@ -205,17 +216,18 @@ var _transOps = {
 	'this': function() { return '_this'; },
 	'exprStmt': function(exp) { return O.transAST(exp) },
 	'program': function() {
-		currClasses = { "Object": "", "Null": "Object", "Number": "Object", "Boolean": "Object", "True": "Boolean", "False": "Boolean" };
+		currClasses = new cClasses();
 		currClass = "";
 		var asts = Array.prototype.slice.call(arguments, 0);
-		return "OO.initializeCT();" + transList(asts).join(';');
+		return "OO.initializeCT();var _id=Symbol();" + transList(asts).join(';');
 	},
 
 	'varDecls': function() {
 		var rets = [];
 		var args = Array.prototype.slice.call(arguments, 0);
-		while( args.length > 0 ) {
-			var set = args.shift();
+		var index = 0;
+		while( index < args.length ) {
+			var set = args[index++];
 			rets.push( set[0] + "=" + O.transAST(set[1]) );
 		}
 		return "var " + rets.join(',');
@@ -233,10 +245,10 @@ var _transOps = {
 		currClass = className;
 		return 'OO.declareMethod(' + checkString(className) + ', ' + checkString(selector) + ', '
 				+ 'function(' + ['_this'].concat(args).join(',') + ') {'
-					+ 'var _ret=null, _id=Symbol(), _exc; try {'
+					+ 'var _ret=null, _id=Symbol(); try {'
 						+ transList(bodyASTs).join(';')
-					+ '} catch(exc) { if(!(exc instanceof Return)||exc._id!==_id) _exc=exc; }'
-				+ 'if(_exc)throw _exc;return _ret; } )'
+					+ '} catch(exc) { if(!(exc instanceof Return)||exc._id!==_id) throw exc; }'
+				+ 'return _ret; } )'
 	},
 	'return': function(exp) {
 		return '_ret=' + O.transAST(exp) + '; throw new Return(_id)';
@@ -258,17 +270,19 @@ var _transOps = {
 				+ [ checkString(method) ].concat( transList(args) ).join(',') + ')';
 	},
 
-	'block': function(vars, bodyASTs) {
-		bodyASTs = transList(bodyASTs);
-		if( !/^_ret/.test(bodyASTs[bodyASTs.length-1].toString()) )
-			bodyASTs[bodyASTs.length-1] = 'return ' + bodyASTs[bodyASTs.length-1];
-		return 'OO.instantiate("Block",function(' + vars.join(',') + ') {' + bodyASTs.join(';') + '})';
+	'block': function(vars, asts) {
+		if( asts.length === 0 )
+			asts.push(null);
+		asts = transList(asts);
+		if( !/^_ret/.test(asts[asts.length-1].toString()) )
+			asts[asts.length-1] = 'return ' + asts[asts.length-1];
+		return 'OO.instantiate("Block",function(' + vars.join(',') + ') {' + asts.join(';') + '})';
 	}
 };
 
 O.transAST = function(ast) {
   if( !(ast instanceof Array) )
-		return ast.toString();
+		return ""+ast;
 	var tag = ast[0];
 	var args = ast.slice(1);
 	if( !_transOps[tag] )
