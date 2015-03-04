@@ -1,3 +1,4 @@
+
 function cClass(name, superClass, instVars) {
 	this.cname = name;
 	this.superClass = superClass;
@@ -112,15 +113,15 @@ var OO = {
 	},
 	send: function(recv, selector) {
 		var args = Array.prototype.slice.call(arguments, 2);
-		if( this._isPrimitive(recv) )
-			return this._sendPrimitive(recv, selector, args);
-		return recv.callMethod(selector, args);
+		return this._isPrimitive(recv)
+			? this._sendPrimitive(recv, selector, args)
+			: recv.callMethod(selector, args);
 	},
 	superSend: function(superClassName, recv, selector) {
 		var args = Array.prototype.slice.call(arguments, 3);
-		if( this._isPrimitive(recv) )
-			return this._sendPrimitive(recv, selector, args, superClassName);
-		return recv.callMethod( recv.classType.getMethod(selector, superClassName), args );
+		return this._isPrimitive(recv)
+			? this._sendPrimitive(recv, selector, args, superClassName)
+			: recv.callMethod( recv.classType.getMethod(selector, superClassName), args );
 	},
 	_isPrimitive: function(recv) {
 		return ( typeof recv === 'number' ) || ( typeof recv === 'boolean' ) || ( recv ===  null );
@@ -128,9 +129,9 @@ var OO = {
 	_sendPrimitive: function(recv, selector, args, superName) {
 		var className = "";
 
-		if( typeof recv === 'number'  ) className = "Number";
-		if( typeof recv === 'boolean' ) className = recv ? "True" : "False";
-		if( recv === null )             className = "Null";
+		if( typeof recv === 'number'  )       className = "Number";
+		else if( typeof recv === 'boolean' )  className = recv ? "True" : "False";
+		else if( recv === null )              className = "Null";
 
 		var classType = this.getClass(className);
 		if( superName !== undefined ) {
@@ -149,6 +150,15 @@ OO.initializeCT = function() {
 	OO.declareMethod("Object", "isNumber",   function(_this)        { return false; });
 	OO.declareMethod("Object", "===",        function(_this, other) { return _this === other; });
 	OO.declareMethod("Object", "!==",        function(_this, other) { return _this !== other; });
+
+	OO.declareClass( "Block", "Object", ['fun']);
+	OO.declareMethod("Block", "initialize", function(_this, fun) {
+		OO.setInstVar(_this, 'fun', fun);
+	});
+	OO.declareMethod("Block", "call",       function(_this) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		return OO.getInstVar(_this, 'fun').apply(undefined, args);
+	});
 
 	OO.declareClass( "Number", "Object", []);
 	OO.declareMethod("Number", "isNumber",   function(_this)        { return true; });
@@ -180,12 +190,19 @@ function transList(args) {
 	return args.map(function(val) { return O.transAST(val); } );
 }
 
+function Return(_id) {
+    this.name = "Return";
+    this.message = "Contains a value to be returned from a function.";
+		this._id = _id;
+}
+
 var currClasses, currClass;
 var _transOps = {
 	'null': function() { return 'null'; },
 	'true': function() { return 'true'; },
 	'false': function() { return 'false'; },
 	'number': function(val) { return val; },
+	'this': function() { return '_this'; },
 	'exprStmt': function(exp) { return O.transAST(exp) },
 	'program': function() {
 		currClasses = { "Object": "", "Null": "Object", "Number": "Object", "Boolean": "Object", "True": "Boolean", "False": "Boolean" };
@@ -193,6 +210,19 @@ var _transOps = {
 		var asts = Array.prototype.slice.call(arguments, 0);
 		return "OO.initializeCT();" + transList(asts).join(';');
 	},
+
+	'varDecls': function() {
+		var rets = [];
+		var args = Array.prototype.slice.call(arguments, 0);
+		while( args.length > 0 ) {
+			var set = args.shift();
+			rets.push( set[0] + "=" + O.transAST(set[1]) );
+		}
+		return "var " + rets.join(',');
+	},
+	'getVar': function(id) { return id; },
+	'setVar': function(id, exp) { return id + "=" + O.transAST(exp); },
+
 	'classDecl': function(name, superName) {
 		currClasses[name] = superName;
 		var vals = Array.prototype.slice.call(arguments, 2);
@@ -203,12 +233,16 @@ var _transOps = {
 		currClass = className;
 		return 'OO.declareMethod(' + checkString(className) + ', ' + checkString(selector) + ', '
 				+ 'function(' + ['_this'].concat(args).join(',') + ') {'
-					+ transList(bodyASTs).join(';') + ';'
-				+ '} )'
+					+ 'var _ret=null, _id=Symbol(), _exc; try {'
+						+ transList(bodyASTs).join(';')
+					+ '} catch(exc) { if(!(exc instanceof Return)||exc._id!==_id) _exc=exc; }'
+				+ 'if(_exc)throw _exc;return _ret; } )'
 	},
 	'return': function(exp) {
-		return 'return ' + O.transAST(exp);
+		return '_ret=' + O.transAST(exp) + '; throw new Return(_id)';
 	},
+	'getInstVar': function(id) { return '_this.' + id; },
+	'setInstVar': function(id, exp) { return '_this.' + id + '=' + O.transAST(exp); },
 	'new': function(name) {
 		var args = Array.prototype.slice.call(arguments, 1);
 		return "OO.instantiate(" + [checkString(name)].concat(transList(args)).join(',') + ")";
@@ -223,19 +257,13 @@ var _transOps = {
 		return 'OO.superSend(' + checkString(super_name) + ', _this, '
 				+ [ checkString(method) ].concat( transList(args) ).join(',') + ')';
 	},
-	'varDecls': function() {
-		var rets = [];
-		var args = Array.prototype.slice.call(arguments, 0);
-		while( args.length > 0 ) {
-			var set = args.shift();
-			rets.push( set[0] + "=" + O.transAST(set[1]) );
-		}
-		return "var " + rets.join(',');
-	},
-	'getVar': function(id) { return id; },
-	'setVar': function(id, exp) { return id + "=" + O.transAST(exp); },
-	'getInstVar': function(id) { return '_this.' + id; },
-	'setInstVar': function(id, exp) { return '_this.' + id + '=' + O.transAST(exp); }
+
+	'block': function(vars, bodyASTs) {
+		bodyASTs = transList(bodyASTs);
+		if( !/^_ret/.test(bodyASTs[bodyASTs.length-1].toString()) )
+			bodyASTs[bodyASTs.length-1] = 'return ' + bodyASTs[bodyASTs.length-1];
+		return 'OO.instantiate("Block",function(' + vars.join(',') + ') {' + bodyASTs.join(';') + '})';
+	}
 };
 
 O.transAST = function(ast) {
@@ -244,6 +272,6 @@ O.transAST = function(ast) {
 	var tag = ast[0];
 	var args = ast.slice(1);
 	if( !_transOps[tag] )
-		throw new Error("AST tag '"+tag+"' not currently supported");
+		throw new Error("AST tag '" + tag + "' not currently supported");
 	return _transOps[tag].apply(undefined, args);
 };

@@ -37,7 +37,7 @@ tests(O,
     name: 'non-local return (2/2)',
     code: 'def Object.m() {\n' +
           '  var b = { return 5; };\n' +
-          ' return this.n(b) * 2;\n' +
+          '  return this.n(b) * 2;\n' +
           '}\n\n' +
           'def Object.n(aBlock) {\n' +
           '  aBlock.call();\n' +
@@ -47,4 +47,3 @@ tests(O,
     expected: 5
   }
 );
-
