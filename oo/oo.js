@@ -214,12 +214,14 @@ var _transOps = {
 	'false': function() { return 'false'; },
 	'number': function(val) { return val; },
 	'this': function() { return '_this'; },
-	'exprStmt': function(exp) { return O.transAST(exp) },
+	'exprStmt': function(exp) {
+		return '_ans=' + O.transAST(exp)
+	},
 	'program': function() {
 		currClasses = new cClasses();
 		currClass = "";
 		var asts = Array.prototype.slice.call(arguments, 0);
-		return "OO.initializeCT();var _id=Symbol();" + transList(asts).join(';');
+		return [].concat("OO.initializeCT()", "var _id=Symbol()", "var _ans=null", transList(asts), "_ans").join(';');
 	},
 
 	'varDecls': function() {
@@ -271,12 +273,14 @@ var _transOps = {
 	},
 
 	'block': function(vars, asts) {
-		if( asts.length === 0 )
-			asts.push(null);
+		// if( asts.length === 0 )
+			// asts.push(null);
 		asts = transList(asts);
-		if( !/^_ret/.test(asts[asts.length-1].toString()) )
-			asts[asts.length-1] = 'return ' + asts[asts.length-1];
-		return 'OO.instantiate("Block",function(' + vars.join(',') + ') {' + asts.join(';') + '})';
+		// if( !/^_ret/.test(asts[asts.length-1].toString()) )
+			// asts[asts.length-1] = 'return ' + asts[asts.length-1];
+		return 'OO.instantiate("Block",function('
+			+ vars.join(',') + ') {' + [].concat('var _ans=null', asts, 'return _ans').join(';')
+		+ '})';
 	}
 };
 
