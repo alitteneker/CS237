@@ -199,7 +199,7 @@ function Return(_id) {
 		this._id = _id;
 }
 
-function cClasses() {
+function currClassList() {
 	this["Object"]  = "";
 	this["Null"]    = "Object";
 	this["Number"]  = "Object";
@@ -207,7 +207,7 @@ function cClasses() {
 	this["True"]    = "Boolean";
 	this["False"]   = "Boolean";
 }
-var currClasses = new cClasses, currClass;
+var currClasses = new currClassList(), currClass;
 var _transOps = {
 	'null': function() { return 'null'; },
 	'true': function() { return 'true'; },
@@ -218,7 +218,7 @@ var _transOps = {
 		return '_ans=' + O.transAST(exp)
 	},
 	'program': function() {
-		currClasses = new cClasses();
+		currClasses = new currClassList();
 		currClass = "";
 		var asts = Array.prototype.slice.call(arguments, 0);
 		return [].concat("OO.initializeCT()", "var _id=Symbol()", "var _ans=null", transList(asts), "_ans").join(';');
