@@ -193,10 +193,11 @@ function transList(args) {
 	return newArgs;
 }
 
-function Return(_id) {
+function Return(_id, value) {
     this.name = "Return";
     this.message = "Floating return.";
 		this._id = _id;
+		this._value = value;
 }
 
 function currClassList() {
@@ -249,11 +250,11 @@ var _transOps = {
 				+ 'function(' + ['_this'].concat(args).join(',') + ') {'
 					+ 'var _ret=null, _id=Symbol(); try {'
 						+ transList(bodyASTs).join(';')
-					+ '} catch(exc) { if(!(exc instanceof Return)||exc._id!==_id) throw exc; }'
+					+ '} catch(exc) { if(exc instanceof Return && exc._id===_id) _ret=exc._value; else throw exc; }'
 				+ 'return _ret; } )'
 	},
 	'return': function(exp) {
-		return '_ret=' + O.transAST(exp) + '; throw new Return(_id)';
+		return 'throw new Return(_id, ' + O.transAST(exp) + ')';
 	},
 	'getInstVar': function(id) { return '_this.' + id; },
 	'setInstVar': function(id, exp) { return '_this.' + id + '=' + O.transAST(exp); },
@@ -273,11 +274,7 @@ var _transOps = {
 	},
 
 	'block': function(vars, asts) {
-		// if( asts.length === 0 )
-			// asts.push(null);
 		asts = transList(asts);
-		// if( !/^_ret/.test(asts[asts.length-1].toString()) )
-			// asts[asts.length-1] = 'return ' + asts[asts.length-1];
 		return 'OO.instantiate("Block",function('
 			+ vars.join(',') + ') {' + [].concat('var _ans=null', asts, 'return _ans').join(';')
 		+ '})';
