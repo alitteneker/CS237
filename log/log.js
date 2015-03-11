@@ -30,8 +30,8 @@ Clause.prototype.rewrite = function(subst) {
 };
 
 Var.prototype.rewrite = function(subst) {
-  if( subst.bindings[this.name] )
-    return subst.bindings[this.name];
+  if( subst.lookup(this.name) )
+    return subst.lookup(this.name);
   return this;
 };
 
@@ -40,7 +40,26 @@ Var.prototype.rewrite = function(subst) {
 // -----------------------------------------------------------------------------
 
 Subst.prototype.unify = function(term1, term2) {
-  throw new TODO("Subst.prototype.unify not implemented");
+  term1 = term1.rewrite(this);
+  term2 = term2.rewrite(this);
+  if( term1 instanceof Var && term2 instanceof Var ) {
+    this.bind(term1.name, term2);
+    return this;
+  }
+  if( ( term1 instanceof Var && term2 instanceof Clause ) || ( term1 instanceof Clause && term2 instanceof Var ) ) {
+    this.bind.apply(this, term1 instanceof Var ? [term1.name, term2] : [term2.name, term1]);
+    return this;
+  }
+  if( term1 instanceof Clause && term2 instanceof Clause ) {
+    if( term1.name === term2.name && term1.args.length === term2.args.length ) {
+      for( var i = 0; i < term1.args.length; ++i ) {
+        if( !this.unify(term1.args[i], term2.args[i]) )
+          return undefined;
+      }
+      return this;
+    }
+  }
+  throw new Error("Unable to unify");
 };
 
 // -----------------------------------------------------------------------------
