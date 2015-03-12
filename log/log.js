@@ -70,6 +70,13 @@ function tryUnify(subst, term1, term2) {
   }
   return match;
 }
+Subst.prototype.simplify = function() {
+  var subst = new Subst();
+  for( var key in this.bindings ) {
+    subst.bind(key, this.lookup(key).rewrite(this));
+  }
+  return subst;
+};
 
 // walk through the rules to try to find a solution to the given query, then check the nextQuery
 function RuleWalker(program, query, nextQuery) {
@@ -86,7 +93,7 @@ RuleWalker.prototype.setQuery = function(queryClause) {
 };
 RuleWalker.prototype.nextSolution = function(subst) {
   while( this.idx < this.set.length ) {
-    var rule = this.program.rules[this.idx].makeCopyWithFreshVarNames();
+    var rule = this.program.rules[this.idx];
     var disableIncrement = false;
 
     // Unify with rule head
@@ -112,11 +119,13 @@ RuleWalker.prototype.nextSolution = function(subst) {
 
       // If we have a match, return this next solution
       if( match )
-        return match;
+        return match.simplify();
     }
     else
       this.increment();
   }
+
+  return false;
 };
 RuleWalker.prototype.increment = function() {
   this.nextQuery && this.nextQuery.reset();
@@ -128,6 +137,7 @@ RuleWalker.prototype.reset = function() {
 
 // recursively check each query, to make sure they are all accurate together
 function QueryChecker(program, clauses, queryIdx) {
+  this.set = clauses;
   this.query = clauses[queryIdx];
   this.nextQuery = this.query ? new QueryChecker(program, clauses, queryIdx + 1) : null;
   this.walker = this.query ? new RuleWalker(program, this.query, this.nextQuery) : null;
@@ -140,7 +150,10 @@ QueryChecker.prototype.next = function(subst) {
 QueryChecker.prototype.reset = function() {
   this.walker && this.walker.reset();
 };
+
 Program.prototype.solve = function() {
+  for( var i = 0; i < this.rules.length; ++i )
+    this.rules[i] = this.rules[i].makeCopyWithFreshVarNames();
   return new QueryChecker(this, this.query, 0);
 };
 
