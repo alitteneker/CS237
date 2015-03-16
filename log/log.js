@@ -13,27 +13,38 @@ Rule.prototype.makeFresh = function(item, idMap) {
       idMap[item.name] = me.getFreshName();
     return new Var(idMap[item.name]);
   }
-  return new Clause( item.name, item.args.map( function(arg) { return me.makeFresh(arg, idMap); }));
+  return new Clause( item.name, item.args.map( function(arg) {
+    return me.makeFresh(arg, idMap);
+  }));
 }
 Rule.prototype.makeCopyWithFreshVarNames = function() {
   var me = this, ids = {};
-  return new Rule(this.makeFresh(me.head, ids), this.body.map(function(val) { return me.makeFresh(val, ids); }));
+  return new Rule(this.makeFresh(me.head, ids), this.body.map(function(val) {
+    return me.makeFresh(val, ids);
+  }));
 };
 
 Clause.prototype.rewrite = function(subst) {
-  return new Clause( this.name, this.args.map( function(arg) { return arg.rewrite(subst); }) );
+  return new Clause( this.name, this.args.map( function(arg) {
+    return arg.rewrite(subst);
+  }));
 };
 
 Var.prototype.rewrite = function(subst) {
   if( subst.lookup(this.name) )
-    return subst.lookup(this.name).rewrite(subst);
+    return subst.lookup(this.name);
   return new Var(this.name);
 };
 
 // -----------------------------------------------------------------------------
 // Part II: Subst.prototype.unify(term1, term2)
 // -----------------------------------------------------------------------------
-
+Subst.prototype.simplify = function() {
+  var ret = new Subst();
+  for( var key in this.bindings )
+    ret.bind(key, this.bindings[key].rewrite(this));
+  return ret;
+};
 Subst.prototype.unify = function(term1, term2) {
   term1 = term1.rewrite(this);
   term2 = term2.rewrite(this);
@@ -64,19 +75,14 @@ Subst.prototype.unify = function(term1, term2) {
 function tryUnify(subst, term1, term2) {
   var match;
   try {
-    match = subst.clone().unify( term1, term2 );
+    match = subst.clone().unify( term1, term2 ).simplify();
   } catch(e) {
+    if( e.message != 'Unable to unify' )
+      throw e;
     match = undefined;
   }
   return match;
 }
-Subst.prototype.simplify = function() {
-  var subst = new Subst();
-  for( var key in this.bindings ) {
-    subst.bind(key, this.lookup(key).rewrite(this));
-  }
-  return subst;
-};
 
 // walk through the rules to try to find a solution to the given query, then check the nextQuery
 function RuleWalker(program, query, nextQuery) {
@@ -89,7 +95,7 @@ function RuleWalker(program, query, nextQuery) {
 }
 RuleWalker.prototype.setQuery = function(queryClause) {
   this.query = queryClause;
-  this.walker.reset();
+  this.reset();
 };
 RuleWalker.prototype.nextSolution = function(subst) {
   while( this.idx < this.set.length ) {
@@ -109,20 +115,16 @@ RuleWalker.prototype.nextSolution = function(subst) {
     else
       this.bodyWalker = false;
 
-    if( match ) {
-      // If we have a match from our current item, try to unify this solution with the remaining query terms
-      match = this.nextQuery.next(match);
+    // try to unify this solution with the remaining query terms
+    match = match && this.nextQuery.next(match);
 
-      // need to be sure to increment before returning if we have no child queries
-      if( !disableIncrement && ( !this.nextQuery.query || !match ) )
-        this.increment();
-
-      // If we have a match, return this next solution
-      if( match )
-        return match.simplify();
-    }
-    else
+    // need to be sure to increment before returning if we have no child queries
+    if( !disableIncrement && ( !this.nextQuery.query || !match ) )
       this.increment();
+
+    // If we have a match, return this next solution
+    if( match )
+      return match;
   }
 
   return false;
