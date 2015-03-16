@@ -39,11 +39,15 @@ Var.prototype.rewrite = function(subst) {
 // -----------------------------------------------------------------------------
 // Part II: Subst.prototype.unify(term1, term2)
 // -----------------------------------------------------------------------------
-Subst.prototype.simplify = function() {
-  var ret = new Subst();
-  for( var key in this.bindings )
-    ret.bind(key, this.bindings[key].rewrite(this));
-  return ret;
+Subst.prototype.bind = function(varName, term) {
+  if( Object.keys(this.bindings).length > 0 ) {
+    var subst = new Subst();
+    subst.bind(varName, term);
+    for( var key in this.bindings )
+      this.bindings[key] = this.bindings[key].rewrite(subst);
+  }
+  this.bindings[varName] = term;
+  return this;
 };
 Subst.prototype.unify = function(term1, term2) {
   term1 = term1.rewrite(this);
@@ -75,7 +79,7 @@ Subst.prototype.unify = function(term1, term2) {
 function tryUnify(subst, term1, term2) {
   var match;
   try {
-    match = subst.clone().unify( term1, term2 ).simplify();
+    match = subst.clone().unify( term1, term2 );//.simplify();
   } catch(e) {
     if( e.message != 'Unable to unify' )
       throw e;
