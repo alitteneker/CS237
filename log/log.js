@@ -49,9 +49,11 @@ Subst.prototype.bind = function(varName, term) {
   this.bindings[varName] = term;
   return this;
 };
-Subst.prototype.unify = function(term1, term2) {
-  term1 = term1.rewrite(this);
-  term2 = term2.rewrite(this);
+Subst.prototype.unify = function(term1, term2, depth) {
+  if( depth <= 1 ) {
+    term1 = term1.rewrite(this);
+    term2 = term2.rewrite(this);
+  }
   if( term1 instanceof Var && term2 instanceof Var ) {
     this.bind(term1.name, term2);
     return this;
@@ -63,8 +65,9 @@ Subst.prototype.unify = function(term1, term2) {
   if( term1 instanceof Clause && term2 instanceof Clause
     && term1.name === term2.name && term1.args.length === term2.args.length )
   {
+    depth = depth || 0;
     for( var i = 0; i < term1.args.length; ++i ) {
-      if( !this.unify(term1.args[i], term2.args[i]) )
+      if( !this.unify(term1.args[i], term2.args[i], depth + 1 ) )
         return undefined;
     }
     return this;
@@ -79,7 +82,7 @@ Subst.prototype.unify = function(term1, term2) {
 function tryUnify(subst, term1, term2) {
   var match;
   try {
-    match = subst.clone().unify( term1, term2 );//.simplify();
+    match = subst.clone().unify( term1, term2 );
   } catch(e) {
     if( e.message != 'Unable to unify' )
       throw e;
